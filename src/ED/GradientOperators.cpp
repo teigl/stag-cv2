@@ -1118,54 +1118,44 @@ void ComputeGradientMapByMyCompass4Dirs(unsigned char *smoothCh1Img, unsigned ch
 ///-----------------------------------------------------------------------------------------------------------------------------------
 /// Compute color image gradient
 ///
-void ComputeGradientMapByPrewitt(IplImage *smoothImg, short *gradImg, unsigned char *dirImg, int GRADIENT_THRESH){
-  if (smoothImg->nChannels != 3) return;
+void ComputeGradientMapByPrewitt(cv::Mat smoothImg, short *gradImg, unsigned char *dirImg, int GRADIENT_THRESH){
+  if (smoothImg.channels() != 3)
+    return;
 
-  int width = smoothImg->width;
-  int height = smoothImg->height;
+  int width = smoothImg.cols;
+  int height = smoothImg.rows;
 
   // Initialize gradient image for row = 0, row = height-1, column=0, column=width-1                   
-  for (int j=0; j<width; j++){gradImg[j] = gradImg[(height-1)*width+j] = GRADIENT_THRESH-1;}
-  for (int i=1; i<height-1; i++){gradImg[i*width] = gradImg[(i+1)*width-1] = GRADIENT_THRESH-1;}
+  for (int j=0; j<width; j++)
+    gradImg[j] = gradImg[(height-1)*width+j] = GRADIENT_THRESH - 1;
 
-  for (int i=1; i<height-1; i++){
-    unsigned char *prevLine = (unsigned char *)(smoothImg->imageData + (i-1)*smoothImg->widthStep);
-    unsigned char *curLine = (unsigned char *)(smoothImg->imageData + i*smoothImg->widthStep);
-    unsigned char *nextLine = (unsigned char *)(smoothImg->imageData + (i+1)*smoothImg->widthStep);
+  for (int i=1; i<height-1; i++)
+    gradImg[i*width] = gradImg[(i+1)*width-1] = GRADIENT_THRESH - 1;
 
-    for (int j=1; j<width-1; j++){
-      // Prewitt for channel1
-      int com1 = nextLine[(j+1)*3] - prevLine[(j-1)*3];
-      int com2 = prevLine[(j+1)*3] - nextLine[(j-1)*3];
+  for (int i=1; i<height-1; i++)
+  {
+    for (int j=1; j<width-1; j++)
+    {
+      cv::Vec3i com1{smoothImg.at<cv::Vec3b>(i+1,j+1) - smoothImg.at<cv::Vec3b>(i-1,j-1)};
+      cv::Vec3i com2{smoothImg.at<cv::Vec3b>(i-1,j+1) - smoothImg.at<cv::Vec3b>(i+1,j-1)};
+      cv::Vec3i gxs{com1 + com2 + 
+        (cv::Vec3i)(smoothImg.at<cv::Vec3b>(i,j+1) - smoothImg.at<cv::Vec3b>(i,j-1))};
+      cv::Vec3i gys{com1 - com2 + 
+        (cv::Vec3i)(smoothImg.at<cv::Vec3b>(i+1,j) - smoothImg.at<cv::Vec3b>(i-1,j))};
 
-      int gxCh1 = abs(com1 + com2 + (curLine[(j+1)*3] - curLine[(j-1)*3]));
-      int gyCh1 = abs(com1 - com2 + (nextLine[j*3] - prevLine[j*3]));
-      int gradCh1 = gxCh1+gyCh1;
+      for (uint8_t i = 0; i < 3; i++)
+      {
+        gxs[i] = abs(gxs(i));
+        gys[i] = abs(gys(i)); 
+      }
 
-      /// Channel 2
-      com1 = nextLine[(j+1)*3+1] - prevLine[(j-1)*3+1];
-      com2 = prevLine[(j+1)*3+1] - nextLine[(j-1)*3+1];
-
-      int gxCh2 = abs(com1 + com2 + (curLine[(j+1)*3+1] - curLine[(j-1)*3+1]));
-      int gyCh2 = abs(com1 - com2 + (nextLine[j*3+1] - prevLine[j*3+1]));
-      int gradCh2 = gxCh2+gyCh2;
-
-      /// Channel 3
-      com1 = nextLine[(j+1)*3+2] - prevLine[(j-1)*3+2];
-      com2 = prevLine[(j+1)*3+2] - nextLine[(j-1)*3+2];
-
-      int gxCh3 = abs(com1 + com2 + (curLine[(j+1)*3+2] - curLine[(j-1)*3+2]));
-      int gyCh3 = abs(com1 - com2 + (nextLine[j*3+2] - prevLine[j*3+2]));
-      int gradCh3 = gxCh3+gyCh3;
-
-      // Combine the gradients
-      int gx, gy, grad;
+      cv::Vec3i grads = gxs + gys;
 
 #if 1
       // Take the average (Avg)
-      gx = (gxCh1 + gxCh2 + gxCh3 + 2)/3;
-      gy = (gyCh1 + gyCh2 + gyCh3 + 2)/3;
-      grad = (gradCh1 + gradCh2 + gradCh3 + 2)/3;
+      int gx = (gxs[0] + gxs[1] + gxs[2] + 2)/3;
+      int gy = (gys[0] + gys[1] + gys[2] + 2)/3;
+      int grad = (grads[0] + grads[1] + grads[2] + 2)/3;
 
 #else
       // Sum
@@ -1174,8 +1164,10 @@ void ComputeGradientMapByPrewitt(IplImage *smoothImg, short *gradImg, unsigned c
       grad = gradCh1 + gradCh2 + gradCh3;
 #endif
 
-      if (gx > gy) dirImg[i*width+j] = EDGE_VERTICAL;
-      else         dirImg[i*width+j] = EDGE_HORIZONTAL;
+      if (gx > gy)
+        dirImg[i*width+j] = EDGE_VERTICAL;
+      else
+        dirImg[i*width+j] = EDGE_HORIZONTAL;
  
       gradImg[i*width+j] = grad;
     } //end-for

@@ -3,9 +3,9 @@
 #include <math.h>
 #include <stdio.h>
 
-#include <opencv/cv.h>
-#include <opencv/cxcore.h>
-#include <opencv/highgui.h>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 // Burak - commented the line below
 //#include "ImageVideoLib.h"
@@ -398,24 +398,19 @@ void StdRGB2Lab(unsigned char *redImg, unsigned char *greenImg,
 ///-------------------------------------------------------------------------------------
 /// My formulation on an IplImage
 ///
-void RGB2Lab(IplImage *rgbImg, IplImage *labImg) {
+void RGB2Lab(cv::Mat rgbImg, cv::Mat labImg) {
   // First RGB 2 XYZ
   double red, green, blue;
   double x, y, z;
 
-  int width = rgbImg->width;
-  int height = rgbImg->height;
-
-  for (int i = 0; i < height; i++) {
-    unsigned char *rgbLine =
-        (unsigned char *)(rgbImg->imageData + i * rgbImg->widthStep);
-    unsigned char *labLine =
-        (unsigned char *)(labImg->imageData + i * labImg->widthStep);
-
-    for (int j = 0; j < width; j++) {
-      red = rgbLine[2] / 255.0;
-      green = rgbLine[1] / 255.0;
-      blue = rgbLine[0] / 255.0;
+  for (int i = 0; i < rgbImg.rows; i++)
+  {
+    for (int j = 0; j < rgbImg.cols; j++)
+    {
+      cv::Vec3b pixel{rgbImg.at<cv::Vec3b>(i,j)}; 
+      red = pixel[2]/255.0;
+      green = pixel[1]/255.0;
+      blue = pixel[0]/255.0;
 
       if (red > 0.04045)
         red = pow(((red + 0.055) / 1.055), 2.4);
@@ -465,12 +460,10 @@ void RGB2Lab(IplImage *rgbImg, IplImage *labImg) {
       else
         z = (7.787 * z) + (16.0 / 116.0);
 
-      labLine[0] = (unsigned char)(2.55 * ((116.0 * y) - 16));
-      labLine[1] = (unsigned char)(128 + 500 * (x - y));
-      labLine[2] = (unsigned char)(128 + 200 * (y - z));
-
-      rgbLine += 3;
-      labLine += 3;
+      labImg.at<cv::Vec3b>(i,j) = cv::Vec3b{
+        (unsigned char)(2.55 * ((116.0 * y) - 16)),
+        (unsigned char)(128 + 500 * (x - y)),
+        (unsigned char)(128 + 200 * (y - z))};
     } // end-for
   }   // end-for
 } // end-RGB2Lab
@@ -659,40 +652,33 @@ void RGB2LabOpenCV(unsigned char *redImg, unsigned char *greenImg,
                    int height) {
 
   // Convert BGR to Lab using OpenCV
-  IplImage *iplImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 3);
-  IplImage *iplLabImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 3);
+  cv::Mat bgrImg{cv::Size(width, height), CV_8UC3};
+  cv::Mat labImg{cv::Size(width, height), CV_8UC3};
 
   int index = 0;
-  for (int i = 0; i < height; i++) {
-    unsigned char *p =
-        (unsigned char *)(iplImg->imageData + i * iplImg->widthStep);
-
-    for (int j = 0; j < width; j++, p += 3) {
-      p[0] = blueImg[index];
-      p[1] = greenImg[index];
-      p[2] = redImg[index];
+  for (int i = 0; i < height; i++) 
+  {
+    for (int j = 0; j < width; j++) 
+    {
+      bgrImg.at<cv::Vec3b>(i,j) = cv::Vec3b{blueImg[index], blueImg[index], blueImg[index]};
       index++;
-    } // end-for
-  }   // end-for
+    }
+  }
 
   // Convert from BGR2Lab
-  cvCvtColor(iplImg, iplLabImg, CV_BGR2Lab);
+  cv::cvtColor(bgrImg, labImg, cv::COLOR_BGR2Lab);
 
   index = 0;
   for (int i = 0; i < height; i++) {
-    unsigned char *p =
-        (unsigned char *)(iplLabImg->imageData + i * iplLabImg->widthStep);
-
-    for (int j = 0; j < width; j++, p += 3) {
+    for (int j = 0; j < width; j++)
+    {
+      cv::Vec3b p{labImg.at<cv::Vec3b>(i,j)};
       LImg[index] = p[0];
       aImg[index] = p[1];
       bImg[index] = p[2];
       index++;
     } // end-for
   }   // end-for
-
-  cvReleaseImage(&iplImg);
-  cvReleaseImage(&iplLabImg);
 
 #if 0
   // Scale L

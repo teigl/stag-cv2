@@ -16,8 +16,11 @@ CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(MSVC_RUNTIME_LIBRARY "MultiThreaded")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 
 find_package(OpenCV REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 file(GLOB SRC_FILE1 "src/*.c*")
@@ -29,7 +32,7 @@ include_directories(
     src/ED/
 )
 add_library(
-    LibStag SHARED
+    LibStag
     ${SRC_FILE1}
     ${SRC_FILE2}
 )
@@ -38,13 +41,14 @@ target_link_libraries(
     ${OpenCV_LIBS}
 )
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/app)
+set_property(TARGET LibStag PROPERTY
+  MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_executable(
-    testrun
+add_executable(testrun
     main.cpp
 )
-
-target_link_libraries(
-    testrun
+# set_property(TARGET testrun PROPERTY
+#   MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+target_link_libraries(testrun
     LibStag
 )

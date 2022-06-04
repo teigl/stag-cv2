@@ -3,9 +3,9 @@
 #include <math.h>
 #include <limits.h>
 
-#include <opencv/cv.h>
-#include <opencv/cxcore.h>
-#include <opencv/highgui.h>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 
 //#include "EDDLL.h"
 
@@ -162,76 +162,64 @@ EdgeMap *DetectEdgesByEDPF(unsigned char *srcImg, int width, int height, double 
 ///-------------------------------------------------------------------------------
 /// Use cvCanny and return the result as an EdgeMap. smoothingSigma must be >= 1.0
 ///
-EdgeMap *DetectEdgesByCannySR(unsigned char *srcImg, int width, int height, int cannyLowThresh, int cannyHighThresh, int sobelKernelApertureSize, double smoothingSigma){
-  IplImage *iplImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 1);
-  IplImage *edgeImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 1);
+EdgeMap *DetectEdgesByCannySR(unsigned char* srcImg, int width, int height, int cannyLowThresh, int cannyHighThresh, int sobelKernelApertureSize, double smoothingSigma)
+{
+  cv::Mat blurredImg = cv::Mat{cv::Size(width, height), CV_8UC1};
+  memcpy(blurredImg.data, srcImg, width*height);
+  cv::Mat edgeImg = cv::Mat(cv::Size(width, height), CV_8UC1);
 
-  // Copy the source image to iplImg buffer
-  for (int i=0; i<height; i++){
-    unsigned char *p = (unsigned char *)(iplImg->imageData + iplImg->widthStep*i);
-    for (int j=0; j<width; j++) p[j] = srcImg[i*width+j];
-  } //end-for
-
-  if (smoothingSigma <= 1.0) cvSmooth(iplImg, iplImg, CV_GAUSSIAN, 5, 5);
-  else cvSmooth(iplImg, iplImg, CV_GAUSSIAN, 0, 0, smoothingSigma);
-
-  // Copy the smooth image
-  unsigned char *smoothImg = new unsigned char[width*height];
-  for (int i=0; i<height; i++){
-    unsigned char *p = (unsigned char *)(iplImg->imageData + iplImg->widthStep*i);
-    for (int j=0; j<width; j++) smoothImg[i*width+j] = p[j];
-  } //end-for
+  const double defaultSigma = 1.25;
+  if (smoothingSigma <= 1.0) 
+    cv::GaussianBlur(blurredImg, blurredImg, cv::Size(5,5), defaultSigma);
+  else 
+    cv::GaussianBlur(blurredImg, blurredImg, cv::Size(0,0), smoothingSigma);
 
   // Detect edges by cvCanny
   if (sobelKernelApertureSize != 3 && sobelKernelApertureSize != 5 && sobelKernelApertureSize != 7) sobelKernelApertureSize = 3;
-  cvCanny(iplImg, edgeImg, cannyLowThresh, cannyHighThresh, sobelKernelApertureSize);
+    cv::Canny(blurredImg, edgeImg, cannyLowThresh, cannyHighThresh, sobelKernelApertureSize);
 
   // Create the edge map
   EdgeMap *map = new EdgeMap(width, height);
-  memset(map->edgeImg, 0, width*height);
 
-  for (int i=1; i<height-1; i++){
-    unsigned char *p = (unsigned char *)(edgeImg->imageData + edgeImg->widthStep*i);
-    for (int j=1; j<width-1; j++) if (p[j]) map->edgeImg[i*width+j] = 254; // Anchor
-  } //end-for
+  for (int i = 1; i < height-1; i++)
+  {
+    for (int j = 1; j < width-1; j++)
+    {
+      if (edgeImg.at<uint8_t>(i,j))
+        map->edgeImg[i*width+j] = 254;
+    }
+  }
 
-  unsigned char *dirImg = new unsigned char[width*height];
-  short *gradImg = new short[width*height];
+  cv::Mat dirImg{cv::Mat::zeros(cv::Size(width, height), CV_8UC1)};
+  cv::Mat gradImg{cv::Mat::zeros(cv::Size(width, height), CV_16SC1)};
 
-  cvSmooth(edgeImg, edgeImg, CV_GAUSSIAN, 5, 5);
-//  cvSmooth(edgeImg, edgeImg, CV_GAUSSIAN, 0, 0, 0.5);
+  cv::GaussianBlur(edgeImg, edgeImg, cv::Size(5,5), defaultSigma);
 
   // Compute the gradient and edge directions for pixels in the edge areas
-  memset(gradImg, 0, sizeof(short)*width*height);
   for (int i=1; i<height-1; i++){
-    unsigned char *p = (unsigned char *)(edgeImg->imageData + edgeImg->widthStep*i);
+    
     for (int j=1; j<width-1; j++){
-      if (p[j] < 32) continue;
+
+      if (edgeImg.at<uint8_t>(i,j) < 32)
+        continue;
 
       // Compute the gradient value & edge direction
-      int com1 = smoothImg[(i+1)*width+j+1] - smoothImg[(i-1)*width+j-1];
-      int com2 = smoothImg[(i-1)*width+j+1] - smoothImg[(i+1)*width+j-1];
+      int com1 = blurredImg.at<uint8_t>(i+1,j+1) - blurredImg.at<uint8_t>(i-1,j-1);
+      int com2 = blurredImg.at<uint8_t>(i-1,j+1) - blurredImg.at<uint8_t>(i+1,j-1);
 
-      int gx = abs(com1 + com2 + (smoothImg[i*width+j+1] - smoothImg[i*width+j-1]));
-      int gy = abs(com1 - com2 + (smoothImg[(i+1)*width+j] - smoothImg[(i-1)*width+j]));
-      int sum = gx + gy;
-      int index = i*width+j;
-      gradImg[index] = sum;
+      int gx = abs(com1 + com2 + (blurredImg.at<uint8_t>(i,j+1) - blurredImg.at<uint8_t>(i,j-1)));
+      int gy = abs(com1 - com2 + (blurredImg.at<uint8_t>(i+1,j) - blurredImg.at<uint8_t>(i-1,j)));
+      gradImg.at<short>(i,j) = (short)(gx + gy);
 
-      if (gx >= gy) dirImg[index] = 1;  // vertical edge
-      else          dirImg[index] = 2;  // horizontal edge
+      if (gx >= gy)
+        dirImg.at<uint8_t>(i,j) = 1;  // vertical edge
+      else
+        dirImg.at<uint8_t>(i,j) = 2;  // horizontal edge
     } //end-for
   } //end-for
 
   void JoinAnchorPointsUsingSortedAnchors(short *gradImg, unsigned char *dirImg, EdgeMap *map, int GRADIENT_THRESH, int MIN_PATH_LEN);
-  JoinAnchorPointsUsingSortedAnchors(gradImg, dirImg, map, 1, 10);
-
-  delete smoothImg;
-  delete gradImg;
-  delete dirImg;
-
-  cvReleaseImage(&iplImg);
-  cvReleaseImage(&edgeImg);
+  JoinAnchorPointsUsingSortedAnchors((short*)gradImg.data, dirImg.data, map, 1, 10);
 
   return map;
 } //end-DetectEdgesByCannySR
@@ -239,49 +227,44 @@ EdgeMap *DetectEdgesByCannySR(unsigned char *srcImg, int width, int height, int 
 ///-------------------------------------------------------------------------------
 /// Use cvCanny and return the result as an EdgeMap. smoothingSigma must be >= 1.0. Use ED2 for directionless linking
 ///
-EdgeMap *DetectEdgesByCannySR2(unsigned char *srcImg, int width, int height, int cannyLowThresh, int cannyHighThresh, int sobelKernelApertureSize, double smoothingSigma){
-  IplImage *iplImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 1);
-  IplImage *edgeImg = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 1);
+EdgeMap *DetectEdgesByCannySR2(unsigned char *srcImg, int width, int height, int cannyLowThresh, int cannyHighThresh, int sobelKernelApertureSize, double smoothingSigma)
+{
+  cv::Mat blurredImg = cv::Mat{cv::Size(width, height), CV_8UC1};
+  memcpy(blurredImg.data, srcImg, width*height);
+  cv::Mat edgeImg = cv::Mat(cv::Size(width, height), CV_8UC1);
 
-  // Copy the source image to iplImg buffer
-  for (int i=0; i<height; i++){
-    unsigned char *p = (unsigned char *)(iplImg->imageData + iplImg->widthStep*i);
-    for (int j=0; j<width; j++) p[j] = srcImg[i*width+j];
-  } //end-for
+  const double defaultSigma = 1.25;
+  if (smoothingSigma <= 1.0) 
+    cv::GaussianBlur(blurredImg, blurredImg, cv::Size(5,5), defaultSigma);
+  else 
+    cv::GaussianBlur(blurredImg, blurredImg, cv::Size(0,0), smoothingSigma);
 
-  if (smoothingSigma <= 1.0) cvSmooth(iplImg, iplImg, CV_GAUSSIAN, 5, 5);
-  else cvSmooth(iplImg, iplImg, CV_GAUSSIAN, 0, 0, smoothingSigma);
-
+  // Detect edges by cvCanny
   if (sobelKernelApertureSize != 3 && sobelKernelApertureSize != 5 && sobelKernelApertureSize != 7) sobelKernelApertureSize = 3;
-  cvCanny(iplImg, edgeImg, cannyLowThresh, cannyHighThresh, sobelKernelApertureSize);
-//  cvSaveImage("OutputImages/canny1.pgm", edgeImg);
+    cv::Canny(blurredImg, edgeImg, cannyLowThresh, cannyHighThresh, sobelKernelApertureSize);
 
   short *gradImg = new short[width*height];
-  for (int i=0; i<height; i++){
-    unsigned char *p = (unsigned char *)(edgeImg->imageData + edgeImg->widthStep*i);
-    for (int j=0; j<width; j++) if (p[j]) gradImg[i*width+j] = 255; else gradImg[i*width+j] = 0;
-  } //end-for
+  for (int i=0; i<height; i++)
+  {
+    for (int j=0; j<width; j++)
+      gradImg[i*width+j] = 255*(bool)edgeImg.at<uint8_t>(i,j);
+  }
 
-//  cvSmooth(edgeImg, edgeImg, CV_GAUSSIAN, 5, 5);
-  cvSmooth(edgeImg, edgeImg, CV_GAUSSIAN, 0, 0, 0.5);
-//  cvSaveImage("OutputImages/canny2.pgm", edgeImg);
+  cv::GaussianBlur(edgeImg, edgeImg, cv::Size(0,0), 0.5);
 
   for (int i=0; i<height; i++){
-    unsigned char *p = (unsigned char *)(edgeImg->imageData + edgeImg->widthStep*i);
     for (int j=0; j<width; j++){
-      if (gradImg[i*width+j]) continue;
-      if (p[j]) gradImg[i*width+j] = p[j];
+      if (gradImg[i*width+j]) 
+        continue;
+      if (edgeImg.at<uint8_t>(i,j))
+        gradImg[i*width+j] = edgeImg.at<uint8_t>(i,j);
     } //end-for
   } //end-for
 
 //  DumpGradImage("OutputImages/gradImg.pgm", gradImg, width, height);
   EdgeMap *map = DoDetectEdgesByED(gradImg, width, height, 4);
 
-  cvReleaseImage(&iplImg);
-  cvReleaseImage(&edgeImg);
-
   delete gradImg;
-
   return map;
 } //end-DetectEdgesByCannySR2
 
