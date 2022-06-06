@@ -16,5 +16,6 @@ int main(int argc, char** argv)
 
   stag.detectMarkers(image);
   stag.logResults("");
+  
   return 0;
 }

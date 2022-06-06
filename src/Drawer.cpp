@@ -121,6 +121,7 @@ void Drawer::drawMarkers(const string& path, Mat image, const vector<Marker> &ma
 	{
 		vector<Point2d> corners = markers[i].corners;
 		Point2d center = markers[i].center;
+		std::cout << markers[i].id << " " << center << "\n";
 
 		cv::circle(bgrMat, cv::Point(corners[0].x, corners[0].y), 6, cv::Scalar(255, 255, 255), -1, cv::LINE_AA);
 		for (int j = 0; j < 4; j++)

@@ -40,8 +40,10 @@ void Stag::detectMarkers(Mat inImage)
 			falseCandidates.push_back(quads[indQuad]);
 	}
 
+	std::cout << "got " << markers.size() << " markers\n";
 	for (int indMarker = 0; indMarker < markers.size(); indMarker++)
 		poseRefiner.refineMarkerPose(&edInterface, markers[indMarker]);
+	std::cout << "got " << markers.size() << " markers\n";
 }
 
 
